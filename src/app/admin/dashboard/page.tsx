@@ -20,8 +20,12 @@ import {
 
 interface OrderItem {
   id: string;
+  sourceType: string;
+  readyPrintId: string | null;
+  documentTitle: string | null;
   fileName: string;
-  fileData: string;
+  fileData: string | null;
+  storageKey: string | null;
   mimeType: string;
   fileSize: number;
   printMode: string;
@@ -35,7 +39,8 @@ interface OrderItem {
 
 interface PaymentProof {
   id: string;
-  fileData: string;
+  fileData: string | null;
+  storageKey: string | null;
   uploadedAt: string;
 }
 
@@ -164,13 +169,28 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const downloadBase64File = (fileData: string, fileName: string) => {
-    const link = document.createElement('a');
-    link.href = fileData;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadFile = (item: OrderItem) => {
+    const url = item.storageKey || item.fileData;
+    if (!url) {
+      alert('File is no longer available (cleaned up after order completion).');
+      return;
+    }
+    if (url.startsWith('http')) {
+      // Vercel Blob URL — open in new tab for download
+      window.open(url, '_blank');
+    } else {
+      // Base64 data URL — trigger browser download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = item.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const getPaymentProofUrl = (proof: PaymentProof): string | null => {
+    return proof.storageKey || proof.fileData || null;
   };
 
   // Filter counts
@@ -382,11 +402,16 @@ export default function AdminDashboardPage() {
                               {idx + 1}. {item.fileName}
                             </span>
                             <button
-                              onClick={() => downloadBase64File(item.fileData, item.fileName)}
-                              className="px-2 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 rounded border border-indigo-800 flex items-center space-x-1 shrink-0"
+                              onClick={() => downloadFile(item)}
+                              disabled={!item.storageKey && !item.fileData}
+                              className={`px-2 py-1 rounded border flex items-center space-x-1 shrink-0 ${
+                                item.storageKey || item.fileData
+                                  ? 'bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border-indigo-800'
+                                  : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
+                              }`}
                             >
                               <Download className="w-3 h-3" />
-                              <span>Download</span>
+                              <span>{item.storageKey || item.fileData ? 'Download' : 'Cleaned'}</span>
                             </button>
                           </div>
 
@@ -403,17 +428,24 @@ export default function AdminDashboardPage() {
                     </div>
 
                     {/* Payment Screenshot if uploaded */}
-                    {order.paymentProof && (
-                      <div className="pt-1">
-                        <button
-                          onClick={() => setViewingProof(order.paymentProof?.fileData || null)}
-                          className="text-xs text-amber-400 hover:underline flex items-center space-x-1"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>View UPI Payment Proof Screenshot</span>
-                        </button>
-                      </div>
-                    )}
+                    {order.paymentProof && (() => {
+                      const proofUrl = getPaymentProofUrl(order.paymentProof);
+                      return proofUrl ? (
+                        <div className="pt-1">
+                          <button
+                            onClick={() => setViewingProof(proofUrl)}
+                            className="text-xs text-amber-400 hover:underline flex items-center space-x-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View UPI Payment Proof Screenshot</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="pt-1 text-xs text-slate-500">
+                          Payment proof cleaned up after completion.
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Race condition error reporting */}

@@ -737,10 +737,10 @@ export default function CustomerOrderPage() {
                         }
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
                       >
-                        <option value="BW_SINGLE">B&W Single Side (₹1.00 / pg)</option>
-                        <option value="BW_DOUBLE">B&W Double Side (₹1.50 / sheet)</option>
-                        <option value="BW_4UP">B&W 4-Up Duplex (₹2.00 / sheet)</option>
-                        <option value="COLOR_SINGLE">Color Single Side (₹10.00 / pg)</option>
+                        <option value="BW_SINGLE">B&W Single Side</option>
+                        <option value="BW_DOUBLE">B&W Double Side</option>
+                        <option value="BW_4UP">B&W 4-Up Duplex</option>
+                        <option value="COLOR_SINGLE">Color Single Side</option>
                       </select>
                     </div>
 
@@ -791,9 +791,9 @@ export default function CustomerOrderPage() {
                     </label>
                     <div className="grid grid-cols-3 gap-2 text-xs">
                       {[
-                        { key: 'NONE', label: 'No Binding', price: '₹0' },
-                        { key: 'SOFT', label: 'Soft Binding', price: '₹30' },
-                        { key: 'SPIRAL', label: 'Spiral Binding', price: '₹30' },
+                        { key: 'NONE', label: 'No Binding' },
+                        { key: 'SOFT', label: 'Soft Binding' },
+                        { key: 'SPIRAL', label: 'Spiral Binding' },
                       ].map((opt) => (
                         <button
                           key={opt.key}
@@ -810,21 +810,12 @@ export default function CustomerOrderPage() {
                           }`}
                         >
                           <div>{opt.label}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            {opt.price}
-                          </div>
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-900 flex justify-between items-center text-xs">
-                    <span className="text-slate-400">
-                      {item.printMode === 'BW_DOUBLE' || item.printMode === 'BW_4UP'
-                        ? `${estimate.sheets} sheets`
-                        : `${estimate.units} pages`}{' '}
-                      × {item.copies} copy
-                    </span>
+                  <div className="pt-2 border-t border-slate-900 flex justify-end items-center text-xs">
                     <span className="font-semibold text-emerald-400 font-mono">
                       Subtotal: ₹{estimate.totalRupees}
                     </span>

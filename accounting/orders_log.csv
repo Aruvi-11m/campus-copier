@@ -1,0 +1,2 @@
+Date,OrderID,CustomerName,AcceptedByAdmin,Pages,PrintMode,Copies,Binding,TotalAmount,PaymentMethod,PaymentStatus
+2026-07-28,CC-1001,Example Student,Barathwaj,10,BW_SINGLE,1,NONE,10.00,UPI,PAID
