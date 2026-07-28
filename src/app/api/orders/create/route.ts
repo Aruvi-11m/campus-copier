@@ -239,8 +239,19 @@ export async function POST(request: Request) {
     }
 
     // 5. Generate Order ID (e.g. CC-1001)
-    const count = await prisma.order.count();
-    const orderId = `CC-${1001 + count}`;
+    // Find the highest existing order number to avoid collisions after deletions
+    const lastOrder = await prisma.order.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    let nextNumber = 1001;
+    if (lastOrder?.id) {
+      const match = lastOrder.id.match(/CC-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+    const orderId = `CC-${nextNumber}`;
 
     const paymentStatus =
       paymentMethod === 'UPI' && paymentProofStorageKey
