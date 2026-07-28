@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Basic mobile validation (e.g. 10 digits for Indian mobile numbers)
+    // Basic mobile validation (10 digits)
     const mobileDigits = customerMobile.replace(/\D/g, '');
     if (mobileDigits.length < 10) {
       return NextResponse.json(
@@ -89,7 +89,6 @@ export async function POST(request: Request) {
         );
       }
 
-      // Max single file size validation (25MB limit)
       if (file.size > 25 * 1024 * 1024) {
         return NextResponse.json(
           { error: `File ${file.name} exceeds the 25MB maximum size limit.` },
@@ -100,7 +99,6 @@ export async function POST(request: Request) {
       const fileBuffer = Buffer.from(await file.arrayBuffer());
       const mimeType = file.type || 'application/pdf';
 
-      // Detect PDF page count server-side authoritatively
       const detectedPages = await detectPageCountServer(fileBuffer, mimeType);
 
       const copies = Math.max(1, parseInt(itemConfig.copies, 10) || 1);
@@ -119,7 +117,6 @@ export async function POST(request: Request) {
 
       totalAmountPaise += calculated.subtotalPaise;
 
-      // Base64 file string for persistent DB storage
       const fileBase64 = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
 
       processedItems.push({
@@ -138,7 +135,27 @@ export async function POST(request: Request) {
       });
     }
 
-    // 4. Handle Payment Proof for UPI if uploaded
+    // 4. Handle Active UPI Profile Snapshot for Historical Order Preservation
+    let upiRecipientName: string | null = null;
+    let upiIdSnap: string | null = null;
+
+    if (paymentMethod === 'UPI') {
+      const activeAccountSetting = await prisma.setting.findUnique({
+        where: { key: 'active_upi_account' },
+      });
+      const activeAccountId = activeAccountSetting?.value || 'account_1';
+
+      const activeUpi = await prisma.upiAccount.findUnique({
+        where: { id: activeAccountId },
+      });
+
+      if (activeUpi) {
+        upiRecipientName = activeUpi.displayName;
+        upiIdSnap = activeUpi.upiId;
+      }
+    }
+
+    // Handle Payment Proof for UPI
     let paymentProofData: string | null = null;
     if (paymentMethod === 'UPI') {
       const proofFile = formData.get('paymentScreenshot') as File | null;
@@ -164,7 +181,7 @@ export async function POST(request: Request) {
         ? 'PAYMENT_SUBMITTED'
         : 'UNPAID';
 
-    // 6. Create Order atomically in Database
+    // 6. Create Order atomically in Database with Historical UPI Snapshot
     const order = await prisma.order.create({
       data: {
         id: orderId,
@@ -175,6 +192,8 @@ export async function POST(request: Request) {
         totalAmountPaise,
         paymentMethod,
         paymentStatus,
+        upiRecipientName,
+        upiIdSnap,
         orderStatus: 'NEW',
         items: {
           create: processedItems.map((item) => ({
@@ -214,6 +233,8 @@ export async function POST(request: Request) {
         totalAmountPaise: order.totalAmountPaise,
         paymentMethod: order.paymentMethod,
         paymentStatus: order.paymentStatus,
+        upiRecipientName: order.upiRecipientName,
+        upiIdSnap: order.upiIdSnap,
         pickupMethod: order.pickupMethod,
         createdAt: order.createdAt,
       },

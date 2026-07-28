@@ -29,6 +29,15 @@ model ServicePrice {
   updatedAt   DateTime @updatedAt
 }
 
+model UpiAccount {
+  id          String   @id // "account_1" | "account_2"
+  displayName String   // e.g. "Barathwaj", "Thamizaruvi"
+  upiId       String   // e.g. "barathwaj@upi"
+  qrCodeData  String?  // Optional uploaded custom QR image override
+  isEnabled   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
 model Order {
   id                  String      @id // Custom Order ID e.g., CC-1001
   customerName        String
@@ -38,6 +47,11 @@ model Order {
   totalAmountPaise    Int
   paymentMethod       String      // "UPI" | "CASH"
   paymentStatus       String      @default("UNPAID") // "UNPAID" | "PAYMENT_SUBMITTED" | "PAID"
+  
+  // Historical UPI snapshot
+  upiRecipientName    String?     // e.g. "Barathwaj"
+  upiIdSnap           String?     // e.g. "barathwaj@upi"
+
   orderStatus         String      @default("NEW") // "NEW" | "ACCEPTED" | "PRINTING" | "COMPLETED"
   
   assignedAdminId     String?

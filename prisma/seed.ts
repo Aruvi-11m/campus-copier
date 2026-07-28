@@ -94,10 +94,35 @@ async function main() {
 
   console.log('Initial service prices seeded.');
 
-  // 3. Seed Default Settings
+  // 3. Seed UPI Accounts (Account 1: Barathwaj, Account 2: Thamizaruvi)
+  await prisma.upiAccount.upsert({
+    where: { id: 'account_1' },
+    update: { displayName: 'Barathwaj', upiId: 'barathwaj@upi', isEnabled: true },
+    create: {
+      id: 'account_1',
+      displayName: 'Barathwaj',
+      upiId: 'barathwaj@upi',
+      isEnabled: true,
+    },
+  });
+
+  await prisma.upiAccount.upsert({
+    where: { id: 'account_2' },
+    update: { displayName: 'Thamizaruvi', upiId: 'thamizaruvi@upi', isEnabled: true },
+    create: {
+      id: 'account_2',
+      displayName: 'Thamizaruvi',
+      upiId: 'thamizaruvi@upi',
+      isEnabled: true,
+    },
+  });
+
+  console.log('UPI payment accounts seeded.');
+
+  // 4. Seed Default Settings
   const settings = [
     { key: 'accepting_orders', value: 'true' },
-    { key: 'upi_id', value: process.env.DEFAULT_UPI_ID || 'barathwaj@upi' },
+    { key: 'active_upi_account', value: 'account_1' },
     {
       key: 'pickup_instructions',
       value: 'CampusCopier Desk, Main Student Center (9 AM - 6 PM)',

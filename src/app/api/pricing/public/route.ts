@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import QRCode from 'qrcode';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,27 @@ export async function GET() {
       settingsMap[s.key] = s.value;
     }
 
+    const activeAccountId = settingsMap.active_upi_account || 'account_1';
+    const activeUpi = await prisma.upiAccount.findUnique({
+      where: { id: activeAccountId },
+    });
+
+    const displayName = activeUpi?.displayName || 'Barathwaj';
+    const upiId = activeUpi?.upiId || 'barathwaj@upi';
+
+    // Generate base UPI Deep Link string (amount is formatted dynamically on client)
+    const upiUrlTemplate = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(displayName)}&cu=INR`;
+
+    // Generate sample QR code data URL
+    let qrDataUrl = activeUpi?.qrCodeData || null;
+    if (!qrDataUrl) {
+      try {
+        qrDataUrl = await QRCode.toDataURL(upiUrlTemplate, { margin: 2, width: 250 });
+      } catch (err) {
+        console.error('Error generating QR Code:', err);
+      }
+    }
+
     return NextResponse.json({
       services: services.map((s) => ({
         serviceKey: s.serviceKey,
@@ -25,7 +47,13 @@ export async function GET() {
       })),
       settings: {
         acceptingOrders: settingsMap.accepting_orders !== 'false',
-        upiId: settingsMap.upi_id || 'barathwaj@upi',
+        activeUpi: {
+          accountId: activeAccountId,
+          displayName,
+          upiId,
+          qrDataUrl,
+          upiUrlTemplate,
+        },
         pickupInstructions:
           settingsMap.pickup_instructions ||
           'CampusCopier Desk, Main Student Center (9 AM - 6 PM)',

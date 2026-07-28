@@ -9,10 +9,8 @@ import {
   CheckCircle,
   CreditCard,
   Upload,
-  Clock,
   MapPin,
   AlertTriangle,
-  Info,
   Copy,
   Check,
 } from 'lucide-react';
@@ -25,9 +23,17 @@ interface ServicePrice {
   priceRupees: string;
 }
 
+interface ActiveUpiProfile {
+  accountId: string;
+  displayName: string;
+  upiId: string;
+  qrDataUrl: string | null;
+  upiUrlTemplate: string;
+}
+
 interface PublicSettings {
   acceptingOrders: boolean;
-  upiId: string;
+  activeUpi: ActiveUpiProfile;
   pickupInstructions: string;
 }
 
@@ -45,7 +51,13 @@ export default function CustomerOrderPage() {
   const [services, setServices] = useState<ServicePrice[]>([]);
   const [settings, setSettings] = useState<PublicSettings>({
     acceptingOrders: true,
-    upiId: 'barathwaj@upi',
+    activeUpi: {
+      accountId: 'account_1',
+      displayName: 'Barathwaj',
+      upiId: 'barathwaj@upi',
+      qrDataUrl: null,
+      upiUrlTemplate: '',
+    },
     pickupInstructions: 'CampusCopier Desk, Main Student Center',
   });
 
@@ -96,7 +108,6 @@ export default function CustomerOrderPage() {
     }
   };
 
-  // Quick lookup helper for service prices
   const getPricePaise = (key: string): number => {
     const s = services.find((srv) => srv.serviceKey === key);
     if (s) return s.pricePaise;
@@ -133,13 +144,11 @@ export default function CustomerOrderPage() {
   const handleFileChange = async (id: string, file: File | null) => {
     if (!file) return;
 
-    // Check size limit (25MB)
     if (file.size > 25 * 1024 * 1024) {
       alert('File exceeds 25MB maximum limit. Please choose a smaller file.');
       return;
     }
 
-    // Rough page count estimation client-side
     let estimatedPages = 1;
     if (file.type === 'application/pdf') {
       try {
@@ -168,7 +177,6 @@ export default function CustomerOrderPage() {
     );
   };
 
-  // Itemized calculation for live UX display
   const calculateItemEstimate = (item: PrintItemState) => {
     const pages = item.pageCount || 1;
     let sheets = pages;
@@ -307,7 +315,6 @@ export default function CustomerOrderPage() {
     setTimeout(() => setCopiedUpi(false), 2000);
   };
 
-  // 1. Order Confirmation Screen
   if (confirmedOrder) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center p-4">
@@ -339,6 +346,14 @@ export default function CustomerOrderPage() {
                 ₹{(confirmedOrder.totalAmountPaise / 100).toFixed(2)}
               </span>
             </div>
+            {confirmedOrder.paymentMethod === 'UPI' && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Payment Recipient</span>
+                <span className="font-medium text-amber-400">
+                  {confirmedOrder.upiRecipientName} ({confirmedOrder.upiIdSnap})
+                </span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">Payment Method</span>
               <span className="font-medium text-amber-400">
@@ -397,7 +412,7 @@ export default function CustomerOrderPage() {
             </div>
             <div>
               <h1 className="font-bold text-lg leading-tight text-white">CampusCopier</h1>
-              <p className="text-xs text-slate-400">Instant College Printing</p>
+              <p className="text-xs text-slate-400">College Printing Made Simple</p>
             </div>
           </div>
 
@@ -510,7 +525,6 @@ export default function CustomerOrderPage() {
                     )}
                   </div>
 
-                  {/* File Selector */}
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1.5">
                       Upload Document <span className="text-rose-400">*</span>
@@ -544,9 +558,7 @@ export default function CustomerOrderPage() {
                     </div>
                   </div>
 
-                  {/* Print Options */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Print Mode */}
                     <div className="sm:col-span-2">
                       <label className="block text-xs font-medium text-slate-300 mb-1">
                         Print Mode
@@ -565,7 +577,6 @@ export default function CustomerOrderPage() {
                       </select>
                     </div>
 
-                    {/* Copies */}
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
                         Copies
@@ -607,7 +618,6 @@ export default function CustomerOrderPage() {
                     </div>
                   </div>
 
-                  {/* Binding Option */}
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">
                       Binding Option
@@ -641,7 +651,6 @@ export default function CustomerOrderPage() {
                     </div>
                   </div>
 
-                  {/* Live Item Subtotal */}
                   <div className="pt-2 border-t border-slate-900 flex justify-between items-center text-xs">
                     <span className="text-slate-400">
                       {item.printMode === 'BW_DOUBLE' || item.printMode === 'BW_4UP'
@@ -721,7 +730,7 @@ export default function CustomerOrderPage() {
             </div>
 
             {paymentMethod === 'UPI' ? (
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-400">Pay Total Amount:</span>
                   <span className="text-lg font-bold text-amber-400 font-mono">
@@ -729,24 +738,41 @@ export default function CustomerOrderPage() {
                   </span>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 flex justify-between items-center">
-                  <div>
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">
-                      UPI ID
+                {/* Recipient Display Name & Copy UPI ID */}
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="text-[10px] text-amber-400 uppercase tracking-wider font-semibold">
+                        Pay Recipient: {settings.activeUpi.displayName}
+                      </div>
+                      <div className="text-xs font-mono font-semibold text-slate-200">
+                        {settings.activeUpi.upiId}
+                      </div>
                     </div>
-                    <div className="text-xs font-mono font-semibold text-slate-200">
-                      {settings.upiId}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(settings.activeUpi.upiId)}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded flex items-center space-x-1"
+                    >
+                      {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedUpi ? 'Copied' : 'Copy UPI ID'}</span>
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(settings.upiId)}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded flex items-center space-x-1"
-                  >
-                    {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedUpi ? 'Copied' : 'Copy'}</span>
-                  </button>
                 </div>
+
+                {/* Generated UPI QR Code */}
+                {settings.activeUpi.qrDataUrl && (
+                  <div className="flex flex-col items-center justify-center p-3 bg-white rounded-xl shadow border border-slate-700">
+                    <img
+                      src={settings.activeUpi.qrDataUrl}
+                      alt="UPI Payment QR Code"
+                      className="w-44 h-44 object-contain"
+                    />
+                    <p className="text-[11px] text-slate-800 font-semibold mt-1">
+                      Scan with Google Pay, PhonePe, Paytm, or BHIM
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1.5">
@@ -802,10 +828,9 @@ export default function CustomerOrderPage() {
         </form>
       </main>
 
-      {/* Admin Link Footer */}
       <footer className="py-4 border-t border-slate-900 text-center text-xs text-slate-500">
         <a href="/admin/login" className="hover:text-indigo-400 transition">
-          Admin Portal Login
+          CampusCopier Admin Portal Login
         </a>
       </footer>
     </div>

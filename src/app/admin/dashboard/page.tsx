@@ -47,6 +47,8 @@ interface Order {
   totalAmountPaise: number;
   paymentMethod: string;
   paymentStatus: string;
+  upiRecipientName?: string | null;
+  upiIdSnap?: string | null;
   orderStatus: string;
   assignedAdminId: string | null;
   assignedAdmin: {
@@ -330,6 +332,16 @@ export default function AdminDashboardPage() {
                         </a>
                       </div>
                     </div>
+
+                    {/* Historical Payment Destination Snapshot */}
+                    {order.paymentMethod === 'UPI' && order.upiRecipientName && (
+                      <div className="bg-amber-950/40 border border-amber-900/60 rounded-xl p-2.5 text-xs text-amber-200 flex justify-between items-center">
+                        <span className="text-amber-400 font-semibold">Payment Destination:</span>
+                        <span className="font-mono text-slate-200">
+                          {order.upiRecipientName} ({order.upiIdSnap})
+                        </span>
+                      </div>
+                    )}
 
                     {/* Assigned Admin Display */}
                     <div className="text-xs flex items-center justify-between bg-slate-950/60 px-3 py-2 rounded-xl border border-slate-800/80">

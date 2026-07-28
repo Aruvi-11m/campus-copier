@@ -16,9 +16,29 @@ export async function GET() {
     settingsMap[s.key] = s.value;
   }
 
+  const upiAccounts = await prisma.upiAccount.findMany({
+    orderBy: { id: 'asc' },
+  });
+
+  const account1 = upiAccounts.find((a) => a.id === 'account_1') || {
+    id: 'account_1',
+    displayName: 'Barathwaj',
+    upiId: 'barathwaj@upi',
+    isEnabled: true,
+  };
+
+  const account2 = upiAccounts.find((a) => a.id === 'account_2') || {
+    id: 'account_2',
+    displayName: 'Thamizaruvi',
+    upiId: 'thamizaruvi@upi',
+    isEnabled: true,
+  };
+
   return NextResponse.json({
     acceptingOrders: settingsMap.accepting_orders !== 'false',
-    upiId: settingsMap.upi_id || 'barathwaj@upi',
+    activeUpiAccount: settingsMap.active_upi_account || 'account_1',
+    account1,
+    account2,
     pickupInstructions:
       settingsMap.pickup_instructions ||
       'CampusCopier Desk, Main Student Center (9 AM - 6 PM)',
@@ -32,7 +52,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { acceptingOrders, upiId, pickupInstructions } = await request.json();
+    const { acceptingOrders, activeUpiAccount, account1, account2, pickupInstructions } =
+      await request.json();
 
     if (typeof acceptingOrders === 'boolean') {
       await prisma.setting.upsert({
@@ -42,11 +63,45 @@ export async function POST(request: Request) {
       });
     }
 
-    if (typeof upiId === 'string') {
+    if (activeUpiAccount === 'account_1' || activeUpiAccount === 'account_2') {
       await prisma.setting.upsert({
-        where: { key: 'upi_id' },
-        update: { value: upiId.trim() },
-        create: { key: 'upi_id', value: upiId.trim() },
+        where: { key: 'active_upi_account' },
+        update: { value: activeUpiAccount },
+        create: { key: 'active_upi_account', value: activeUpiAccount },
+      });
+    }
+
+    if (account1 && typeof account1.displayName === 'string' && typeof account1.upiId === 'string') {
+      await prisma.upiAccount.upsert({
+        where: { id: 'account_1' },
+        update: {
+          displayName: account1.displayName.trim(),
+          upiId: account1.upiId.trim(),
+          isEnabled: account1.isEnabled !== false,
+        },
+        create: {
+          id: 'account_1',
+          displayName: account1.displayName.trim(),
+          upiId: account1.upiId.trim(),
+          isEnabled: account1.isEnabled !== false,
+        },
+      });
+    }
+
+    if (account2 && typeof account2.displayName === 'string' && typeof account2.upiId === 'string') {
+      await prisma.upiAccount.upsert({
+        where: { id: 'account_2' },
+        update: {
+          displayName: account2.displayName.trim(),
+          upiId: account2.upiId.trim(),
+          isEnabled: account2.isEnabled !== false,
+        },
+        create: {
+          id: 'account_2',
+          displayName: account2.displayName.trim(),
+          upiId: account2.upiId.trim(),
+          isEnabled: account2.isEnabled !== false,
+        },
       });
     }
 
