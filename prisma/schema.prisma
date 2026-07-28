@@ -1,0 +1,89 @@
+// Prisma Schema for CampusCopier
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  displayName  String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  assignedOrders Order[]
+}
+
+model ServicePrice {
+  id          String   @id @default(uuid())
+  serviceKey  String   @unique
+  name        String
+  unit        String
+  pricePaise  Int
+  isEnabled   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+model Order {
+  id                  String      @id // Custom Order ID e.g., CC-1001
+  customerName        String
+  customerMobile      String
+  specialInstructions String?
+  pickupMethod        String      @default("College Pickup")
+  totalAmountPaise    Int
+  paymentMethod       String      // "UPI" | "CASH"
+  paymentStatus       String      @default("UNPAID") // "UNPAID" | "PAYMENT_SUBMITTED" | "PAID"
+  orderStatus         String      @default("NEW") // "NEW" | "ACCEPTED" | "PRINTING" | "COMPLETED"
+  
+  assignedAdminId     String?
+  assignedAdmin       Admin?      @relation(fields: [assignedAdminId], references: [id])
+  
+  acceptedAt          DateTime?
+  printingStartedAt   DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  items               OrderItem[]
+  paymentProof        PaymentProof?
+}
+
+model OrderItem {
+  id               String   @id @default(uuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  fileName         String
+  fileData         String   // Base64 file data or persistent storage URL
+  mimeType         String
+  fileSize         Int
+  
+  printMode        String   // "BW_SINGLE" | "BW_DOUBLE" | "BW_4UP" | "COLOR_SINGLE"
+  pageCount        Int
+  physicalSheets   Int
+  copies           Int
+  bindingOption    String   // "NONE" | "SOFT" | "SPIRAL"
+  
+  pricePerUnitPaise Int
+  bindingPricePaise Int
+  subtotalPaise    Int
+}
+
+model PaymentProof {
+  id          String   @id @default(uuid())
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  fileData    String   // Base64 or cloud storage URL
+  uploadedAt  DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
