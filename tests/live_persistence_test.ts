@@ -122,12 +122,13 @@ async function main() {
   console.log(`  - Order C (${orderC}): Status = ${fetchedC.orderStatus}, Assigned = ${fetchedC.assignedAdmin?.displayName}`);
   console.log(`  - Order D (${orderD}): Status = ${fetchedD.orderStatus}, Assigned = ${fetchedD.assignedAdmin?.displayName}`);
 
-  // 5. Verify File Payload Persistence
-  console.log('\n[Step 3] Verifying File Data Persistence on Completed Order D...');
-  if (!fetchedD.items || fetchedD.items.length === 0 || !fetchedD.items[0].fileData) {
-    throw new Error('Completed Order D is missing persisted file data!');
+  // 5. Verify File Reference Persistence
+  console.log('\n[Step 3] Verifying File Data / Storage Key Persistence on Completed Order D...');
+  const fileRef = fetchedD.items[0]?.storageKey || fetchedD.items[0]?.fileData;
+  if (!fetchedD.items || fetchedD.items.length === 0 || !fileRef) {
+    throw new Error('Completed Order D is missing persisted file reference / storageKey!');
   }
-  console.log(`✓ Completed Order D file payload verified! (${fetchedD.items[0].fileName}, ${fetchedD.items[0].fileData.substring(0, 30)}...)`);
+  console.log(`✓ Completed Order D file payload verified! (${fetchedD.items[0].fileName}, Key/URL: ${fileRef.substring(0, 30)}...)`);
 
   console.log('\n======================================================');
   console.log(`🎉 MANDATORY PRODUCTION PERSISTENCE VERIFICATION PASSED!`);
