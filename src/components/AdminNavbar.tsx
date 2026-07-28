@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Printer, ShoppingBag, Tag, Settings, LogOut, User } from 'lucide-react';
+import { Printer, ShoppingBag, BookOpen, Tag, Settings, LogOut, User } from 'lucide-react';
 
 interface AdminNavbarProps {
   displayName?: string;
@@ -24,6 +24,7 @@ export default function AdminNavbar({ displayName }: AdminNavbarProps) {
 
   const navItems = [
     { label: 'Orders', href: '/admin/dashboard', icon: ShoppingBag },
+    { label: 'Ready Prints', href: '/admin/ready-prints', icon: BookOpen },
     { label: 'Pricing', href: '/admin/pricing', icon: Tag },
     { label: 'Settings', href: '/admin/settings', icon: Settings },
   ];

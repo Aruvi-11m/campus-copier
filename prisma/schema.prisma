@@ -1,4 +1,4 @@
-// Prisma Schema for CampusCopier (PostgreSQL Production)
+// Prisma Schema for CampusCopier (PostgreSQL Production + Object Storage)
 
 generator client {
   provider = "prisma-client-js"
@@ -38,6 +38,41 @@ model UpiAccount {
   updatedAt   DateTime @updatedAt
 }
 
+model ReadyPrint {
+  id               String   @id @default(uuid())
+  title            String
+  category         String?
+  description      String?
+  
+  storageKey       String   // Persistent Object Storage / Vercel Blob URL
+  fileName         String
+  mimeType         String
+  fileSize         Int
+  pageCount        Int
+
+  defaultPrintMode String   @default("BW_SINGLE")
+  defaultBinding   String   @default("NONE")
+  defaultCopies    Int      @default(1)
+
+  isPublished      Boolean  @default(true)
+  isDeleted        Boolean  @default(false)
+  createdByAdminId String?
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  orderItems       OrderItem[]
+}
+
+model FileAsset {
+  id         String   @id @default(uuid())
+  storageKey String   // Persistent Object Storage / Vercel Blob URL
+  fileName   String
+  mimeType   String
+  fileSize   Int
+  createdAt  DateTime @default(now())
+}
+
 model Order {
   id                  String      @id // Custom Order ID e.g., CC-1001
   customerName        String
@@ -68,33 +103,40 @@ model Order {
 }
 
 model OrderItem {
-  id               String   @id @default(uuid())
-  orderId          String
-  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id                String      @id @default(uuid())
+  orderId           String
+  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
-  fileName         String
-  fileData         String   // Base64 file data or persistent storage URL
-  mimeType         String
-  fileSize         Int
+  sourceType        String      @default("CUSTOMER_UPLOAD") // "CUSTOMER_UPLOAD" | "READY_PRINT"
+  readyPrintId      String?
+  readyPrint        ReadyPrint? @relation(fields: [readyPrintId], references: [id])
+  documentTitle     String?     // Historical document title snapshot
   
-  printMode        String   // "BW_SINGLE" | "BW_DOUBLE" | "BW_4UP" | "COLOR_SINGLE"
-  pageCount        Int
-  physicalSheets   Int
-  copies           Int
-  bindingOption    String   // "NONE" | "SOFT" | "SPIRAL"
+  fileName          String
+  fileData          String?     // Backwards compatible optional data URL
+  storageKey        String?     // Persistent Object Storage / Vercel Blob URL
+  mimeType          String
+  fileSize          Int
+  
+  printMode         String   // "BW_SINGLE" | "BW_DOUBLE" | "BW_4UP" | "COLOR_SINGLE"
+  pageCount         Int
+  physicalSheets    Int
+  copies            Int
+  bindingOption     String   // "NONE" | "SOFT" | "SPIRAL"
   
   pricePerUnitPaise Int
   bindingPricePaise Int
-  subtotalPaise    Int
+  subtotalPaise     Int
 }
 
 model PaymentProof {
-  id          String   @id @default(uuid())
-  orderId     String   @unique
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
-  fileData    String   // Base64 or cloud storage URL
-  uploadedAt  DateTime @default(now())
+  fileData   String?  // Backwards compatible optional data URL
+  storageKey String?  // Persistent Object Storage / Vercel Blob URL
+  uploadedAt DateTime @default(now())
 }
 
 model Setting {

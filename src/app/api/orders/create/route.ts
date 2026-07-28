@@ -36,7 +36,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Basic mobile validation (10 digits)
     const mobileDigits = customerMobile.replace(/\D/g, '');
     if (mobileDigits.length < 10) {
       return NextResponse.json(
@@ -79,63 +78,126 @@ export async function POST(request: Request) {
 
     for (let i = 0; i < rawItems.length; i++) {
       const itemConfig = rawItems[i];
-      const fileKey = `file_${i}`;
-      const file = formData.get(fileKey) as File | null;
-
-      if (!file) {
-        return NextResponse.json(
-          { error: `Missing uploaded file for item ${i + 1}.` },
-          { status: 400 }
-        );
-      }
-
-      if (file.size > 4 * 1024 * 1024) {
-        return NextResponse.json(
-          { error: `File ${file.name} exceeds the 4MB maximum size limit for online submission.` },
-          { status: 400 }
-        );
-      }
-
-      const fileBuffer = Buffer.from(await file.arrayBuffer());
-      const mimeType = file.type || 'application/pdf';
-
-      const detectedPages = await detectPageCountServer(fileBuffer, mimeType);
-
       const copies = Math.max(1, parseInt(itemConfig.copies, 10) || 1);
       const printMode = itemConfig.printMode || 'BW_SINGLE';
       const bindingOption = itemConfig.bindingOption || 'NONE';
 
-      const calculated = calculateItemPricing(
-        {
-          printMode,
-          pageCount: detectedPages,
-          copies,
-          bindingOption,
-        },
-        priceMap
-      );
+      if (itemConfig.readyPrintId) {
+        // --- READY PRINT ITEM SERVER VALIDATION ---
+        const readyPrint = await prisma.readyPrint.findUnique({
+          where: { id: itemConfig.readyPrintId },
+        });
 
-      totalAmountPaise += calculated.subtotalPaise;
+        if (!readyPrint || readyPrint.isDeleted) {
+          return NextResponse.json(
+            { error: `Selected Ready Print item is no longer available.` },
+            { status: 400 }
+          );
+        }
 
-      const fileBase64 = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+        const calculated = calculateItemPricing(
+          {
+            printMode,
+            pageCount: readyPrint.pageCount,
+            copies,
+            bindingOption,
+          },
+          priceMap
+        );
 
-      processedItems.push({
-        fileName: file.name,
-        fileData: fileBase64,
-        mimeType,
-        fileSize: file.size,
-        printMode: calculated.printMode,
-        pageCount: calculated.pageCount,
-        physicalSheets: calculated.physicalSheets,
-        copies: calculated.copies,
-        bindingOption: calculated.bindingOption,
-        pricePerUnitPaise: calculated.pricePerUnitPaise,
-        bindingPricePaise: calculated.bindingPricePaise,
-        subtotalPaise: calculated.subtotalPaise,
-      });
+        totalAmountPaise += calculated.subtotalPaise;
+
+        processedItems.push({
+          sourceType: 'READY_PRINT',
+          readyPrintId: readyPrint.id,
+          documentTitle: readyPrint.title,
+          fileName: readyPrint.fileName,
+          storageKey: readyPrint.storageKey,
+          mimeType: readyPrint.mimeType,
+          fileSize: readyPrint.fileSize,
+          printMode: calculated.printMode,
+          pageCount: calculated.pageCount,
+          physicalSheets: calculated.physicalSheets,
+          copies: calculated.copies,
+          bindingOption: calculated.bindingOption,
+          pricePerUnitPaise: calculated.pricePerUnitPaise,
+          bindingPricePaise: calculated.bindingPricePaise,
+          subtotalPaise: calculated.subtotalPaise,
+        });
+      } else {
+        // --- CUSTOMER UPLOAD ITEM SERVER VALIDATION ---
+        let storageKey = itemConfig.storageKey || '';
+        let fileName = itemConfig.fileName || '';
+        let mimeType = 'application/pdf';
+        let fileSize = 0;
+        let detectedPages = 1;
+
+        if (storageKey) {
+          // Uploaded via pre-upload storage key
+          fileName = itemConfig.fileName || 'uploaded_document.pdf';
+          mimeType = itemConfig.mimeType || 'application/pdf';
+          fileSize = itemConfig.fileSize || 0;
+          detectedPages = Math.max(1, parseInt(itemConfig.pageCount, 10) || 1);
+        } else {
+          // Direct multipart file fallback
+          const fileKey = `file_${i}`;
+          const file = formData.get(fileKey) as File | null;
+
+          if (!file) {
+            return NextResponse.json(
+              { error: `Missing uploaded file for item ${i + 1}.` },
+              { status: 400 }
+            );
+          }
+
+          if (file.size > 20 * 1024 * 1024) {
+            return NextResponse.json(
+              { error: `File ${file.name} exceeds the 20MB maximum size limit.` },
+              { status: 400 }
+            );
+          }
+
+          const fileBuffer = Buffer.from(await file.arrayBuffer());
+          mimeType = file.type || 'application/pdf';
+          fileName = file.name;
+          fileSize = file.size;
+          detectedPages = await detectPageCountServer(fileBuffer, mimeType);
+          storageKey = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+        }
+
+        const calculated = calculateItemPricing(
+          {
+            printMode,
+            pageCount: detectedPages,
+            copies,
+            bindingOption,
+          },
+          priceMap
+        );
+
+        totalAmountPaise += calculated.subtotalPaise;
+
+        processedItems.push({
+          sourceType: 'CUSTOMER_UPLOAD',
+          readyPrintId: null,
+          documentTitle: null,
+          fileName,
+          storageKey,
+          mimeType,
+          fileSize,
+          printMode: calculated.printMode,
+          pageCount: calculated.pageCount,
+          physicalSheets: calculated.physicalSheets,
+          copies: calculated.copies,
+          bindingOption: calculated.bindingOption,
+          pricePerUnitPaise: calculated.pricePerUnitPaise,
+          bindingPricePaise: calculated.bindingPricePaise,
+          subtotalPaise: calculated.subtotalPaise,
+        });
+      }
     }
 
-    // 4. Handle Active UPI Profile Snapshot for Historical Order Preservation
+    // 4. Handle Active UPI Profile Snapshot
     let upiRecipientName: string | null = null;
     let upiIdSnap: string | null = null;
 
@@ -156,32 +218,36 @@ export async function POST(request: Request) {
     }
 
     // Handle Payment Proof for UPI
-    let paymentProofData: string | null = null;
+    let paymentProofStorageKey: string | null = null;
     if (paymentMethod === 'UPI') {
       const proofFile = formData.get('paymentScreenshot') as File | null;
-      if (proofFile && proofFile.size > 0) {
-        if (proofFile.size > 10 * 1024 * 1024) {
+      const proofStorageKeyParam = formData.get('paymentScreenshotStorageKey')?.toString();
+
+      if (proofStorageKeyParam) {
+        paymentProofStorageKey = proofStorageKeyParam;
+      } else if (proofFile && proofFile.size > 0) {
+        if (proofFile.size > 20 * 1024 * 1024) {
           return NextResponse.json(
-            { error: 'Payment screenshot exceeds 10MB size limit.' },
+            { error: 'Payment screenshot exceeds 20MB size limit.' },
             { status: 400 }
           );
         }
         const proofBuffer = Buffer.from(await proofFile.arrayBuffer());
         const proofMime = proofFile.type || 'image/png';
-        paymentProofData = `data:${proofMime};base64,${proofBuffer.toString('base64')}`;
+        paymentProofStorageKey = `data:${proofMime};base64,${proofBuffer.toString('base64')}`;
       }
     }
 
-    // 5. Generate unique Order ID (e.g. CC-1001)
+    // 5. Generate Order ID (e.g. CC-1001)
     const count = await prisma.order.count();
     const orderId = `CC-${1001 + count}`;
 
     const paymentStatus =
-      paymentMethod === 'UPI' && paymentProofData
+      paymentMethod === 'UPI' && paymentProofStorageKey
         ? 'PAYMENT_SUBMITTED'
         : 'UNPAID';
 
-    // 6. Create Order atomically in Database with Historical UPI Snapshot
+    // 6. Create Order atomically in Database
     const order = await prisma.order.create({
       data: {
         id: orderId,
@@ -197,8 +263,11 @@ export async function POST(request: Request) {
         orderStatus: 'NEW',
         items: {
           create: processedItems.map((item) => ({
+            sourceType: item.sourceType,
+            readyPrintId: item.readyPrintId,
+            documentTitle: item.documentTitle,
             fileName: item.fileName,
-            fileData: item.fileData,
+            storageKey: item.storageKey,
             mimeType: item.mimeType,
             fileSize: item.fileSize,
             printMode: item.printMode,
@@ -211,10 +280,10 @@ export async function POST(request: Request) {
             subtotalPaise: item.subtotalPaise,
           })),
         },
-        paymentProof: paymentProofData
+        paymentProof: paymentProofStorageKey
           ? {
               create: {
-                fileData: paymentProofData,
+                storageKey: paymentProofStorageKey,
               },
             }
           : undefined,

@@ -1,3 +1,5 @@
+export {};
+
 const BASE_URL = 'https://campus-copier.vercel.app';
 
 async function main() {

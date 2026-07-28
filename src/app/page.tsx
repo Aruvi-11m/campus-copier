@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  BookOpen,
+  ShoppingBag,
 } from 'lucide-react';
 
 interface ServicePrice {
@@ -37,6 +39,18 @@ interface PublicSettings {
   pickupInstructions: string;
 }
 
+interface ReadyPrintPublic {
+  id: string;
+  title: string;
+  category: string | null;
+  description: string | null;
+  pageCount: number;
+  defaultPrintMode: string;
+  defaultBinding: string;
+  defaultCopies: number;
+  fileName: string;
+}
+
 interface PrintItemState {
   id: string;
   file: File | null;
@@ -44,11 +58,16 @@ interface PrintItemState {
   printMode: 'BW_SINGLE' | 'BW_DOUBLE' | 'BW_4UP' | 'COLOR_SINGLE';
   copies: number;
   bindingOption: 'NONE' | 'SOFT' | 'SPIRAL';
+  // Ready Print Extensions
+  readyPrintId?: string;
+  documentTitle?: string;
+  storageKey?: string;
 }
 
 export default function CustomerOrderPage() {
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [services, setServices] = useState<ServicePrice[]>([]);
+  const [readyPrints, setReadyPrints] = useState<ReadyPrintPublic[]>([]);
   const [settings, setSettings] = useState<PublicSettings>({
     acceptingOrders: true,
     activeUpi: {
@@ -97,6 +116,7 @@ export default function CustomerOrderPage() {
       const data = await res.json();
       if (res.ok) {
         setServices(data.services || []);
+        setReadyPrints(data.readyPrints || []);
         if (data.settings) {
           setSettings(data.settings);
         }
@@ -136,6 +156,27 @@ export default function CustomerOrderPage() {
     ]);
   };
 
+  const handleAddReadyPrint = (rp: ReadyPrintPublic) => {
+    const newItem: PrintItemState = {
+      id: Date.now().toString(),
+      file: null,
+      readyPrintId: rp.id,
+      documentTitle: rp.title,
+      pageCount: rp.pageCount,
+      printMode: (rp.defaultPrintMode as any) || 'BW_SINGLE',
+      copies: rp.defaultCopies || 1,
+      bindingOption: (rp.defaultBinding as any) || 'NONE',
+    };
+
+    // If first item is empty, replace it, else append
+    setItems((prev) => {
+      if (prev.length === 1 && !prev[0].file && !prev[0].readyPrintId) {
+        return [newItem];
+      }
+      return [...prev, newItem];
+    });
+  };
+
   const handleRemoveItem = (id: string) => {
     if (items.length <= 1) return;
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -144,8 +185,8 @@ export default function CustomerOrderPage() {
   const handleFileChange = async (id: string, file: File | null) => {
     if (!file) return;
 
-    if (file.size > 4 * 1024 * 1024) {
-      alert('File exceeds 4MB maximum limit for online submission. Please choose a smaller file.');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('File exceeds 20MB maximum size limit. Please select a smaller file.');
       return;
     }
 
@@ -165,7 +206,13 @@ export default function CustomerOrderPage() {
     setItems((prev) =>
       prev.map((item) =>
         item.id === id
-          ? { ...item, file, pageCount: Math.max(1, estimatedPages) }
+          ? {
+              ...item,
+              file,
+              readyPrintId: undefined,
+              documentTitle: undefined,
+              pageCount: Math.max(1, estimatedPages),
+            }
           : item
       )
     );
@@ -253,8 +300,8 @@ export default function CustomerOrderPage() {
     }
 
     for (let i = 0; i < items.length; i++) {
-      if (!items[i].file) {
-        setErrorMessage(`Please upload a document for Print Item #${i + 1}.`);
+      if (!items[i].file && !items[i].readyPrintId) {
+        setErrorMessage(`Please upload a document or select a Ready Print for Item #${i + 1}.`);
         return;
       }
     }
@@ -274,21 +321,58 @@ export default function CustomerOrderPage() {
       }
       formData.append('paymentMethod', paymentMethod);
 
-      const itemsConfig = items.map((item) => ({
-        printMode: item.printMode,
-        copies: item.copies,
-        bindingOption: item.bindingOption,
-      }));
-      formData.append('printItems', JSON.stringify(itemsConfig));
+      // Pre-upload customer files to /api/uploads to handle 20MB files safely
+      const uploadedItemPayloads = [];
 
-      items.forEach((item, index) => {
-        if (item.file) {
-          formData.append(`file_${index}`, item.file);
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.readyPrintId) {
+          uploadedItemPayloads.push({
+            readyPrintId: item.readyPrintId,
+            printMode: item.printMode,
+            copies: item.copies,
+            bindingOption: item.bindingOption,
+          });
+        } else if (item.file) {
+          const uploadFormData = new FormData();
+          uploadFormData.append('file', item.file);
+
+          const uploadRes = await fetch('/api/uploads', {
+            method: 'POST',
+            body: uploadFormData,
+          });
+          const uploadData = await uploadRes.json();
+
+          if (!uploadRes.ok || !uploadData.success) {
+            throw new Error(uploadData.error || `Failed to upload document for Item #${i + 1}`);
+          }
+
+          uploadedItemPayloads.push({
+            storageKey: uploadData.storageKey,
+            fileName: uploadData.fileName,
+            mimeType: uploadData.mimeType,
+            fileSize: uploadData.fileSize,
+            pageCount: item.pageCount,
+            printMode: item.printMode,
+            copies: item.copies,
+            bindingOption: item.bindingOption,
+          });
         }
-      });
+      }
+
+      formData.append('printItems', JSON.stringify(uploadedItemPayloads));
 
       if (paymentMethod === 'UPI' && paymentScreenshot) {
-        formData.append('paymentScreenshot', paymentScreenshot);
+        const proofFormData = new FormData();
+        proofFormData.append('file', paymentScreenshot);
+        const proofRes = await fetch('/api/uploads', {
+          method: 'POST',
+          body: proofFormData,
+        });
+        const proofData = await proofRes.json();
+        if (proofRes.ok && proofData.storageKey) {
+          formData.append('paymentScreenshotStorageKey', proofData.storageKey);
+        }
       }
 
       const res = await fetch('/api/orders/create', {
@@ -304,7 +388,7 @@ export default function CustomerOrderPage() {
       } else {
         const rawText = await res.text();
         if (res.status === 413 || rawText.includes('Request Entity Too Large')) {
-          throw new Error('Total upload payload exceeds server limit (4.5MB). Please upload a smaller file.');
+          throw new Error('Total upload payload exceeds server limit (20MB). Please choose a smaller file.');
         }
         throw new Error('Unable to place your order. Please try again.');
       }
@@ -460,6 +544,54 @@ export default function CustomerOrderPage() {
           </div>
         )}
 
+        {/* READY PRINTS QUICK CATALOG SECTION */}
+        {readyPrints.length > 0 && (
+          <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center space-x-2">
+                <BookOpen className="w-5 h-5 text-indigo-400" />
+                <span>READY PRINTS</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Notes and materials already uploaded for quick ordering.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {readyPrints.map((rp) => (
+                <div
+                  key={rp.id}
+                  className="bg-slate-950 border border-slate-800 hover:border-indigo-800 rounded-xl p-4 flex flex-col justify-between space-y-3 transition"
+                >
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                        {rp.category || 'General'}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {rp.pageCount} pages
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-sm text-white leading-snug">{rp.title}</h3>
+                    {rp.description && (
+                      <p className="text-xs text-slate-400 line-clamp-2">{rp.description}</p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddReadyPrint(rp)}
+                    className="w-full py-2 bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 text-xs font-semibold rounded-lg flex items-center justify-center space-x-1.5 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add to Order</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <form onSubmit={handleSubmitOrder} className="space-y-6">
           {/* Step 1: Customer Details */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
@@ -511,7 +643,7 @@ export default function CustomerOrderPage() {
                 </span>
                 <span>Print Items</span>
               </h2>
-              <span className="text-xs text-slate-400">PDF, JPG, PNG up to 4MB</span>
+              <span className="text-xs text-slate-400">PDF, JPG, PNG up to 20MB per file</span>
             </div>
 
             {items.map((item, index) => {
@@ -522,9 +654,16 @@ export default function CustomerOrderPage() {
                   className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4 relative"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-                      Print Item #{index + 1}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                        Print Item #{index + 1}
+                      </span>
+                      {item.readyPrintId && (
+                        <span className="bg-indigo-950 text-indigo-300 border border-indigo-800 text-[10px] font-mono px-2 py-0.5 rounded">
+                          Ready Print: {item.documentTitle}
+                        </span>
+                      )}
+                    </div>
                     {items.length > 1 && (
                       <button
                         type="button"
@@ -537,38 +676,54 @@ export default function CustomerOrderPage() {
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                      Upload Document <span className="text-rose-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept=".pdf,image/jpeg,image/png"
-                        onChange={(e) =>
-                          handleFileChange(item.id, e.target.files?.[0] || null)
-                        }
-                        className="hidden"
-                        id={`file-input-${item.id}`}
-                      />
-                      <label
-                        htmlFor={`file-input-${item.id}`}
-                        className="flex items-center justify-between w-full bg-slate-900 border border-dashed border-slate-700 hover:border-indigo-500 rounded-xl px-4 py-3 text-xs cursor-pointer transition"
-                      >
-                        <div className="flex items-center space-x-2 truncate">
-                          <Upload className="w-4 h-4 text-indigo-400 shrink-0" />
-                          <span className="text-slate-200 truncate">
-                            {item.file ? item.file.name : 'Choose PDF or Image file'}
-                          </span>
-                        </div>
-                        {item.file && (
-                          <span className="text-xs font-mono text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800 shrink-0">
-                            ~{item.pageCount} pg
-                          </span>
-                        )}
+                  {!item.readyPrintId ? (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        Upload Document <span className="text-rose-400">*</span>
                       </label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept=".pdf,image/jpeg,image/png"
+                          onChange={(e) =>
+                            handleFileChange(item.id, e.target.files?.[0] || null)
+                          }
+                          className="hidden"
+                          id={`file-input-${item.id}`}
+                        />
+                        <label
+                          htmlFor={`file-input-${item.id}`}
+                          className="flex items-center justify-between w-full bg-slate-900 border border-dashed border-slate-700 hover:border-indigo-500 rounded-xl px-4 py-3 text-xs cursor-pointer transition"
+                        >
+                          <div className="flex items-center space-x-2 truncate">
+                            <Upload className="w-4 h-4 text-indigo-400 shrink-0" />
+                            <span className="text-slate-200 truncate">
+                              {item.file ? item.file.name : 'Choose PDF or Image file (up to 20MB)'}
+                            </span>
+                          </div>
+                          {item.file && (
+                            <span className="text-xs font-mono text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800 shrink-0">
+                              ~{item.pageCount} pg
+                            </span>
+                          )}
+                        </label>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center text-xs">
+                      <div>
+                        <div className="font-bold text-white">{item.documentTitle}</div>
+                        <div className="text-slate-400 text-[11px]">Pre-uploaded document ({item.pageCount} pages)</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateItem(item.id, { readyPrintId: undefined, documentTitle: undefined })}
+                        className="text-[11px] text-indigo-400 hover:underline"
+                      >
+                        Change to Upload
+                      </button>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
@@ -684,7 +839,7 @@ export default function CustomerOrderPage() {
               className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-indigo-400 hover:text-indigo-300 text-xs font-semibold rounded-xl flex items-center justify-center space-x-2 transition"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Another Print Item</span>
+              <span>Add Custom Upload File</span>
             </button>
           </section>
 
@@ -813,38 +968,23 @@ export default function CustomerOrderPage() {
             </div>
           )}
 
-          {/* Place Order CTA */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-semibold text-slate-300">Total Live Estimate:</span>
-              <span className="text-2xl font-bold text-white font-mono">
-                ₹{(totalEstimatePaise / 100).toFixed(2)}
-              </span>
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting || !settings.acceptingOrders}
-              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-xl transition shadow-lg shadow-emerald-900/20 flex items-center justify-center space-x-2"
-            >
-              {submitting ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Calculating & Placing Order...</span>
-                </>
-              ) : (
-                <span>Place Order</span>
-              )}
-            </button>
-          </div>
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={submitting || !settings.acceptingOrders}
+            className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 font-bold text-white rounded-2xl shadow-xl transition flex items-center justify-center space-x-2 text-base"
+          >
+            {submitting ? (
+              <span>Uploading & Processing Order...</span>
+            ) : (
+              <>
+                <ShoppingBag className="w-5 h-5" />
+                <span>Place Order (₹{(totalEstimatePaise / 100).toFixed(2)})</span>
+              </>
+            )}
+          </button>
         </form>
       </main>
-
-      <footer className="py-4 border-t border-slate-900 text-center text-xs text-slate-500">
-        <a href="/admin/login" className="hover:text-indigo-400 transition">
-          CampusCopier Admin Portal Login
-        </a>
-      </footer>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+export {};
+
 import https from 'https';
 
 const BASE_URL = 'https://campus-copier.vercel.app';

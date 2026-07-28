@@ -15,6 +15,7 @@ import {
   Download,
   Eye,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 
 interface OrderItem {
@@ -77,6 +78,7 @@ export default function AdminDashboardPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [actionError, setActionError] = useState<Record<string, string>>({});
   const [viewingProof, setViewingProof] = useState<string | null>(null);
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuthAndLoad();
@@ -467,6 +469,17 @@ export default function AdminDashboardPage() {
                         <span>Mark Completed</span>
                       </button>
                     )}
+
+                    {/* Manual Delete Order button ONLY if COMPLETED */}
+                    {order.orderStatus === 'COMPLETED' && (
+                      <button
+                        onClick={() => setDeleteConfirmOrder(order.id)}
+                        className="w-full py-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/80 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition mt-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Order</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -474,6 +487,55 @@ export default function AdminDashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-2 bg-rose-950/80 border border-rose-800 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Delete Order Permanently?</h3>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Delete order <strong className="font-mono text-emerald-400">{deleteConfirmOrder}</strong> permanently? This completed order will be removed. This action cannot be undone.
+            </p>
+
+            <div className="pt-2 flex justify-end space-x-2">
+              <button
+                onClick={() => setDeleteConfirmOrder(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/admin/orders/delete', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ orderId: deleteConfirmOrder }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      alert(data.error || 'Failed to delete order.');
+                    }
+                    setDeleteConfirmOrder(null);
+                    checkAuthAndLoad();
+                  } catch (err: any) {
+                    alert(err.message || 'Error deleting order.');
+                  }
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow transition"
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Screenshot Modal */}
       {viewingProof && (

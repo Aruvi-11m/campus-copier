@@ -37,6 +37,22 @@ export async function GET() {
       }
     }
 
+    const readyPrints = await prisma.readyPrint.findMany({
+      where: { isPublished: true, isDeleted: false },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        description: true,
+        pageCount: true,
+        defaultPrintMode: true,
+        defaultBinding: true,
+        defaultCopies: true,
+        fileName: true,
+      },
+    });
+
     return NextResponse.json({
       services: services.map((s) => ({
         serviceKey: s.serviceKey,
@@ -45,6 +61,7 @@ export async function GET() {
         pricePaise: s.pricePaise,
         priceRupees: (s.pricePaise / 100).toFixed(2),
       })),
+      readyPrints,
       settings: {
         acceptingOrders: settingsMap.accepting_orders !== 'false',
         activeUpi: {
