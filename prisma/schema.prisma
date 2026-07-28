@@ -1,11 +1,11 @@
-// Prisma Schema for CampusCopier
+// Prisma Schema for CampusCopier (PostgreSQL Production)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
