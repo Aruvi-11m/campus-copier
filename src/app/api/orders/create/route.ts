@@ -89,9 +89,9 @@ export async function POST(request: Request) {
         );
       }
 
-      if (file.size > 25 * 1024 * 1024) {
+      if (file.size > 4 * 1024 * 1024) {
         return NextResponse.json(
-          { error: `File ${file.name} exceeds the 25MB maximum size limit.` },
+          { error: `File ${file.name} exceeds the 4MB maximum size limit for online submission.` },
           { status: 400 }
         );
       }

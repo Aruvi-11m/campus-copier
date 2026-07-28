@@ -144,8 +144,8 @@ export default function CustomerOrderPage() {
   const handleFileChange = async (id: string, file: File | null) => {
     if (!file) return;
 
-    if (file.size > 25 * 1024 * 1024) {
-      alert('File exceeds 25MB maximum limit. Please choose a smaller file.');
+    if (file.size > 4 * 1024 * 1024) {
+      alert('File exceeds 4MB maximum limit for online submission. Please choose a smaller file.');
       return;
     }
 
@@ -296,9 +296,21 @@ export default function CustomerOrderPage() {
         body: formData,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to place order.');
+      const contentType = res.headers.get('content-type') || '';
+      let data: any = null;
+
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const rawText = await res.text();
+        if (res.status === 413 || rawText.includes('Request Entity Too Large')) {
+          throw new Error('Total upload payload exceeds server limit (4.5MB). Please upload a smaller file.');
+        }
+        throw new Error('Unable to place your order. Please try again.');
+      }
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Failed to place order.');
       }
 
       setConfirmedOrder(data.order);
@@ -499,7 +511,7 @@ export default function CustomerOrderPage() {
                 </span>
                 <span>Print Items</span>
               </h2>
-              <span className="text-xs text-slate-400">PDF, JPG, PNG up to 25MB</span>
+              <span className="text-xs text-slate-400">PDF, JPG, PNG up to 4MB</span>
             </div>
 
             {items.map((item, index) => {
