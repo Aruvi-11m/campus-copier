@@ -238,20 +238,30 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Generate Order ID (e.g. CC-1001)
-    // Find the highest existing order number to avoid collisions after deletions
-    const lastOrder = await prisma.order.findFirst({
-      orderBy: { createdAt: 'desc' },
+    // 5. Generate Order ID (e.g. CC-1001) safely without collisions
+    const existingOrders = await prisma.order.findMany({
       select: { id: true },
     });
-    let nextNumber = 1001;
-    if (lastOrder?.id) {
-      const match = lastOrder.id.match(/CC-(\d+)/);
+
+    let maxNum = 1000;
+    for (const ord of existingOrders) {
+      const match = ord.id.match(/CC-(\d+)/);
       if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
       }
     }
-    const orderId = `CC-${nextNumber}`;
+
+    let nextNumber = maxNum + 1;
+    let orderId = `CC-${nextNumber}`;
+
+    // Extra safety retry loop in case of race conditions
+    while (await prisma.order.findUnique({ where: { id: orderId } })) {
+      nextNumber++;
+      orderId = `CC-${nextNumber}`;
+    }
 
     const paymentStatus =
       paymentMethod === 'UPI' && paymentProofStorageKey
