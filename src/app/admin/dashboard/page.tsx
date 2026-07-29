@@ -502,16 +502,14 @@ export default function AdminDashboardPage() {
                       </button>
                     )}
 
-                    {/* Manual Delete Order button ONLY if COMPLETED */}
-                    {order.orderStatus === 'COMPLETED' && (
-                      <button
-                        onClick={() => setDeleteConfirmOrder(order.id)}
-                        className="w-full py-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/80 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition mt-2"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete Order</span>
-                      </button>
-                    )}
+                    {/* Delete Order button (allows deleting duplicate or invalid orders) */}
+                    <button
+                      onClick={() => setDeleteConfirmOrder(order.id)}
+                      className="w-full py-2 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/80 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition mt-2"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Order</span>
+                    </button>
                   </div>
                 </div>
               );

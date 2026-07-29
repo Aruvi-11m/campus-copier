@@ -24,13 +24,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    // STRICT SERVER RULE: Only COMPLETED orders can be deleted
-    if (order.orderStatus !== 'COMPLETED') {
-      return NextResponse.json(
-        { error: 'Only COMPLETED orders can be permanently deleted.' },
-        { status: 400 }
-      );
-    }
+    // Admins can delete any order (e.g., duplicate orders, test submissions, completed or invalid orders)
 
     // Safe File Cleanup logic for exclusive customer files
     for (const item of order.items) {

@@ -143,3 +143,14 @@ model Setting {
   key   String @id
   value String
 }
+
+model ConsumablePurchase {
+  id             String   @id @default(uuid())
+  itemName       String   // e.g. "Printer Ink", "Paper", "Stapler Pin", "Photo Sheet", "Glass Sheet", "Chart Paper"
+  category       String   @default("Consumable") // "Paper" | "Ink" | "Hardware" | "Binding" | "Custom"
+  quantity       Int      @default(1)
+  totalCostPaise Int      // Cost in paise
+  notes          String?
+  purchasedBy    String   // Admin display name or username who recorded it
+  createdAt      DateTime @default(now())
+}
